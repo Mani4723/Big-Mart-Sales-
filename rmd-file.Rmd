@@ -1,0 +1,504 @@
+---
+title: "Big Mart Sales"
+author: "Manikanta"
+date: "December 9, 2016"
+output: github_document
+params: 
+  filename: "Train.csv" 
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## 
+For me Kaggle and Analytics Vidya are the best places to learn from other data scientists. I have participated in few data science competitions on both platforms. Data Science competitions genrally takes place like this, first companies provide data and prize money to setup competitions, they provide few weeks of time to compete. if you end up in top 10 you might get a chance(/ have to) to present your results. As far as Begineers, if you missed the competition or not able to get decent score on dashboards, you can take up this data sets and practice on it, try different models, features, try all the things you learnt in theory and also learn from solutions of other data scientists. This is my contribution to data science begineers and Analytics Vidya community.
+
+
+This is a Regression-Predictive Modelling Problem (Predictor/resonse variable is continous). More about the problem, and where you can find the datasets is given below.
+
+
+
+# Table of contents 
+Table of contents
+
+1. Introduction
+2. Understanding the problem, Hypothesis Generation, Variable Identification
+3. Data exploration and Visualization, Univariate Analysis, Bi-variate, Statistical Tests
+4. Data Preprocessing, Missing Value Treatment, Handling Outliers, Variable transformation    (encode categorical variables if necessary), Feature Engineering
+5. Proper Validation
+6. Model Selection and Building
+7. Summary
+
+
+
+## Introduction 
+
+Given is the sales data of 10 BigMart store chains in various cities. Data contains 1559 products across 10 stores. Our aim is to build a predictive model to find the key parameters related to product and/or stores,that contribute to increase in sales.
+
+Data sets, Description of Variables can be can be found [here](http://datahack.analyticsvidhya.com/practice-problem-bigmart-sales-prediction)
+
+BigMart Sales was a data science competition conducted by [AnalyticsVidya](https://www.analyticsvidya.com) platform. Now the data sets are available for practice. 
+
+
+## Understanding the problem 
+
+The idea is to find the key properties of product and stores that can impact the sales of different products. 
+Let's take a look at the data first. 
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+Train <- read.csv("M:/bla bla/D.sci/data sets/Big mart sales/Train_UWu5bXk.csv")
+Test <- read.csv("M:/bla bla/D.sci/data sets/Big mart sales/Test_u94Q5KV.csv")
+str(Train)
+summary(Train)
+```
+
+
+## Data Exploration and Visualization, Filling Missing Values, Feature Engneering. 
+
+ 
+
+#Item_identifier
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+Test$Item_Outlet_Sales = 0
+fulldata = rbind(Train, Test)
+str(fulldata$Item_Identifier)
+
+fulldata$Item_ID_Class = substring(fulldata$Item_Identifier, 1, 2)
+fulldata$Item_ID_Class = as.factor(fulldata$Item_ID_Class)
+
+
+fulldata$Item_ID_class_type = substring(fulldata$Item_Identifier, 1, 3)
+fulldata$Item_ID_class_type = as.factor(fulldata$Item_ID_class_type)
+
+```
+
+The data contain 1559 item identifiers. These identifiers are a combination of three letters and two numbers. Keeping just the first two letters of each identifier yields a neat categorization in drinks (DR), food (FD) and non-consumable (NC). Furthur, we also keep the first three letters of each identifier in a separate variable for added granularity of the data.
+
+
+
+# Item_Weight
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Item_Weight)
+
+```
+we can see that 2439 entries are missing in the category Item_Weight.
+we will see visually more about the Item_Weight. 
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggbiplot)
+library(gridExtra)
+library(plyr)
+library(dplyr)
+library(caret)
+library(mice)
+library(VIM)
+
+
+ggplot(fulldata, aes(Item_Type, Item_Weight))+
+geom_boxplot() + 
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) +
+  xlab("Item Type") + ylab("Item_Weight") + ggtitle("Weight Vs type")
+
+
+ggplot(fulldata, aes(Outlet_Identifier, Item_Weight)) + geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, color = "black")) + 
+  labs(title = "Weight Vs outlet", x = "Outlet", y = "Weight")
+
+
+```
+
+Only Outlets OUT019 and OUT027 are having missing values.
+Since each Item_Identifier is related to product type, Missing values in Item weight can filled using weights of same Products from other stores. 
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+weightsByItem <- as.data.frame( ddply(na.omit(fulldata), 
+                                      ~Item_Identifier, 
+                                      summarise, 
+                                      mean=mean(Item_Weight), 
+                                      sd=sd(Item_Weight)))
+fulldata$Item_Weight <- ifelse(is.na(fulldata$Item_Weight), 
+                            weightsByItem$mean[
+                              match(fulldata$Item_Identifier, weightsByItem$Item_Identifier)], fulldata$Item_Weight)
+
+ggplot(fulldata, aes(Outlet_Identifier, Item_Weight)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Outlet_Identifier") + 
+  ylab("Item Weight") + 
+  ggtitle("Item Weight vs Outlet identifier")
+```
+
+Looks like our Imputing is very accurate. All the medians, boxes and whiskers are identical to each other. 
+This is genrally unusual and not seen very often. This is because these missings values are intentionally created by competition conductors. But in general we should know why and how missing values will be generated in the data and try to impute accordingly.
+
+
+
+## Item_Fat_Content
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Item_Fat_Content)
+
+```
+
+LF, low fat and Low Fat all represent same. Similarly reg and Regular are same. 
+So let's change that. we replace LF and low fat by 'Low Fat' and reg, Regular by 'Regular'.
+
+Further, there are different types of non-consumables products such as Health and Hygiene, Household and Others are either Low Fat or Regular according to the data. But Clearly, this makes no sense assing some amount of fat to utensils or household products. Hence, we introduce an new fat level None for these levels.
+
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+fulldata$Item_Fat_Content <- revalue(fulldata$Item_Fat_Content,
+                                  c("LF" = "Low Fat", "low fat" = "Low Fat", "reg" = "Regular"))
+
+levels(fulldata$Item_Fat_Content) <- c(levels(fulldata$Item_Fat_Content), "None")
+
+fulldata[ which(fulldata$Item_Type == "Health and Hygiene") ,]$Item_Fat_Content <- "None"
+fulldata[ which(fulldata$Item_Type == "Household") ,]$Item_Fat_Content <- "None"
+fulldata[ which(fulldata$Item_Type == "Others") ,]$Item_Fat_Content <- "None"
+
+fulldata$Item_Fat_Content <- factor(fulldata$Item_Fat_Content)
+
+summary(fulldata$Item_Fat_Content)
+```
+
+
+
+## Item_Visibility
+
+
+Now let's  check the Item_Visibility variable, i.e. it is the percentage of display space in a store given to that particular item. Looking at the average visibility of items given in each store type and outlet, 
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Item_Visibility)
+
+outletIdentifiers <- levels(fulldata$Outlet_Identifier)
+itemTypes <- levels(fulldata$Item_Type)
+for (outName in outletIdentifiers) {
+  for (itemName in itemTypes) {
+    fulldata[ which(fulldata$Outlet_Identifier == outName &
+                      fulldata$Item_Type == itemName),]$Item_Visibility <-
+      ifelse(
+        fulldata[ which(fulldata$Outlet_Identifier == outName &
+                          fulldata$Item_Type == itemName), ]$Item_Visibility == 0 ,
+        NA ,
+        fulldata[ which(fulldata$Outlet_Identifier == outName &
+                          fulldata$Item_Type == itemName),]$Item_Visibility
+      )
+  }
+}
+
+ggplot(fulldata, aes(Item_Type, Item_Visibility, fill = Outlet_Size)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item Type") + 
+  ylab("Item Visibility") + 
+  ggtitle("Item visibility vs Item Type")
+
+
+ggplot(fulldata, aes(Outlet_Identifier, Item_Visibility, fill = Outlet_Type)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Outlet_Identifier") + 
+  ylab("Item Visibility") + 
+  ggtitle("Item visibility vs Outlet identifier")
+```
+
+This plots confirms that grocery stores have a smaller selection of wares on offer, i.e. the average visibility per item is higher than in supermarkets. Also, we again see that the median visibilities in supermarkets on the one hand and grocery stores on the other are suspiciously similar. Is this again a hint on how those data were generated?
+
+A problem is that plenty of visibilities in the data are 0. Clearly, this is non-sensical. If an item is not physically on display in a store it cannot be sold there. The simplest approach would be to replace those zeroes by the median visibilities. However, given that those medians are pretty much all the same, this would lead to a huge spike in the distribution of visibilities, i.e. it would greatly distort those distributions. A smarter approach is to change this zero values to NA (missing values) and impute them using either the package mice or manually by predictive mean matching. I have done it manual coding so that it runs faster and takes less time than mice package.
+
+Comparing the densities of existing non-zero and imputed visibilities, 
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+
+fulldata_NonZero_Vis = rbind(Train, Test)
+fulldata_NonZero_Vis = subset(fulldata_NonZero_Vis, Item_Visibility > 0)
+
+VisByItem1 <- as.data.frame( ddply(na.omit(fulldata),  
+                                   ~Item_Identifier + Outlet_Type, 
+                                   summarise, 
+                                   mean=mean(Item_Visibility), 
+                                   sd=sd(Item_Visibility)))
+
+VisByItem1$sd = NULL
+fulldata_NA = subset(fulldata, select = c("Item_Identifier", "Outlet_Type", "Item_Visibility"))
+fulldata_NA$ID = 1:14204
+fulldata_merged = merge(fulldata_NA, VisByItem1, all = TRUE)
+fulldata_merged = fulldata_merged[order(fulldata_merged$ID), ]
+fulldata_merged$Item_Visibility = ifelse(is.na(fulldata_merged$Item_Visibility), 
+                                      fulldata_merged$mean, fulldata_merged$Item_Visibility)
+fulldata$Item_Visibility = fulldata_merged$Item_Visibility
+
+
+VisByItem1 <- as.data.frame( ddply(na.omit(fulldata),  
+                                   ~Item_Identifier,
+                                   summarise, 
+                                   mean=mean(Item_Visibility), 
+                                   sd=sd(Item_Visibility)))
+VisByItem1$sd = NULL
+fulldata_NA = subset(fulldata, select = c("Item_Identifier", "Item_Visibility"))
+fulldata_NA$ID = 1:14204
+fulldata_merged = merge(fulldata_NA, VisByItem1, all = TRUE)
+fulldata_merged = fulldata_merged[order(fulldata_merged$ID), ]
+fulldata_merged$Item_Visibility = ifelse(is.na(fulldata_merged$Item_Visibility), 
+                                      fulldata_merged$mean, fulldata_merged$Item_Visibility)
+
+fulldata$Item_Visibility = fulldata_merged$Item_Visibility
+
+ggplot() + geom_density(aes(x=Item_Visibility), colour="green", data=fulldata_NonZero_Vis) + ggtitle("After Imputing")
+
+summary(fulldata$Item_Visibility)
+
+ggplot() + geom_density(aes(x=Item_Visibility), colour="blue", data=fulldata) + ggtitle("Before Imputing")
+
+summary(fulldata_NonZero_Vis$Item_Visibility) 
+
+ggplot() + geom_density(aes(x=Item_Visibility), colour = "blue", data = fulldata) + geom_density(aes(x=Item_Visibility), colour = "green", data = fulldata_NonZero_Vis)
+```
+
+we see that the two distributions looks almost similar. And also the summary of distribution is same. SO our imuptation doesn't change any distribution patterns in Item_Visibility.
+
+Finally, we normalize all visibilities such that their sum, i.e. the total item visibility per shop, is 100, as it should be.
+
+
+
+## Item_MRP
+
+
+Price of each product. First we will look at its summary and see its distribution visually.
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Item_MRP)
+
+ggplot(fulldata, aes(x=Item_MRP)) + 
+  geom_density(color = "blue", adjust=1/5)
+```
+
+As we can see clearly there are different price level distributions. So we can create a new factor variable which represents these four levels to add more granurality to data.
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(fulldata, aes(x=Item_MRP)) +
+  geom_density(color = "blue", adjust=1/5) +
+  geom_vline(xintercept = 69, color="red")+
+  geom_vline(xintercept = 136, color="red")+
+  geom_vline(xintercept = 203, color="red") + 
+  ggtitle("Density of Item MRP")
+```
+
+
+
+##Outlet Establishment year
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Outlet_Establishment_Year)
+
+```
+Year a shop has been operating. This is a numeric variable. Years from 1985 to 2009. 
+Given the data is sales figure of 2013. We can create a new variable related to number of years of establishment for each store. 
+
+
+
+##Outlet Size
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Outlet_Size)
+```
+Some entries in the category Outlet_Size are empty. To tackle that problem, let's explore sales in various outlets. Counting how many sales where reported by each outlet,
+here we train data set instead of fulldata. 
+
+```{r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+table(fulldata$Outlet_Size, fulldata$Outlet_Type)
+
+table(fulldata$Outlet_Size, fulldata$Outlet_Identifier)
+
+table(fulldata$Outlet_Type, fulldata$Outlet_Identifier)
+
+aggregate(fulldata$Outlet_Identifier, 
+          by=list(Category=fulldata$Outlet_Identifier), FUN="length")
+```
+
+
+clear from the above tables that grocery stores are small sized. And some of the 
+groery store outlet size have not been assigned. clearly, the two grocery stores, OUT010 and OUT019 have reported far less data than the supermarkets. From the data and their description it's not really clear why. In the following I'll assume that it's just because they are much smaller and therefore have a smaller selection of goods to buy. As a check let's count the Item IDs:
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+otherShops <- as.data.frame( setNames(
+  aggregate(
+    fulldata$Outlet_Size, 
+    by=list(Category=fulldata$Outlet_Identifier, 
+            Category=fulldata$Outlet_Type,
+            Category=fulldata$Outlet_Location_Type,
+            Category=fulldata$Outlet_Size), 
+    FUN= length),
+  c("Outlet_Identifier","Outlet_Type", "Outlet_Location_Type", "Outlet_Size", "number")
+))
+otherShops
+```
+
+What else can we learn about the different types of shops?
+
+boxplot of  Sales vs. Outlet identifier
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+fulldata$Years_of_estd <- as.factor(2013 - fulldata$Outlet_Establishment_Year)
+
+ggplot(fulldata[1:8523,], aes(x = Outlet_Type, y = Item_Outlet_Sales, fill = Years_of_estd)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "lightblue")) + 
+  xlab("Outlet Type") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Outlet Type")
+
+ggplot(fulldata[1:8523,], aes(Outlet_Identifier, Item_Outlet_Sales)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Outlet identifier") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Outlet identifier")
+
+levels(fulldata$Outlet_Size)[1] = "Small"
+fulldata$Outlet_Size = factor(fulldata$Outlet_Size)
+```
+
+From above tables and visualization we can conclude that the missing values in the outlet size category concern one grocery store and two type 1 supermarkets. From what we have seen above, grocery stores and supermarket type one falls in one category that is size small.
+
+
+Now let's check the rest of Store related variables.
+
+
+
+##Outlet_Loction_Type
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Outlet_Location_Type)
+```
+
+Outlet stores are located in three different types of cities. Furthur we will see which tier is contributing more to sales.
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(fulldata[1:8523,], aes(x = Outlet_Location_Type, y = Item_Outlet_Sales, fill = Outlet_Size)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Outlet location") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Outlet location")
+
+```
+
+
+
+
+##Outlet_Type
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+summary(fulldata$Outlet_Type)
+```
+
+Four different types of stores. Grocery and three different Supermarkets type stores.
+Next we will see which type of stores are contributing more to sales.
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(fulldata[1:8523,], aes(x = Outlet_Type, y = Item_Outlet_Sales, fill = Outlet_Size)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Outlet type") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Outlet type")
+```
+
+
+Let's Check visually the Sales in different Items in different stores, cities, outlets 
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+
+ggplot(fulldata[1:8523,], aes(x = Item_Type, y = Item_Outlet_Sales, fill = Outlet_Size)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item type") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Item type")
+
+
+ggplot(fulldata[1:8523,], aes(x = Item_Type, y = Item_Outlet_Sales, fill = Outlet_Type)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item type") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Item type")
+
+ggplot(fulldata[1:8523,], aes(x = Item_Type, y = Item_Outlet_Sales, fill = Outlet_Location_Type)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item type") + 
+  ylab("Sales") + 
+  ggtitle("Sales vs Item type")
+
+```
+
+Looking at sales figures for various item types, they are plenty of outliers. Dividing Item_Outlet_Sales by Item_MRP helps to reign in some outliers in the plot shown above: 
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(fulldata[1:8523,], aes(x = Item_Type, y = Item_Outlet_Sales/Item_MRP, fill = Outlet_Type)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item type") + 
+  ylab("Sales") + 
+  ggtitle("Sales/MRP vs Item type")
+```
+
+
+
+##let's find out the correlation among numerical variables 
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+library(corrplot)
+fulldata_Num_Corr <- cor(fulldata[1:8523,][sapply(fulldata[1:8523,], is.numeric)])
+fulldata_Num_Corr
+
+
+ 
+corrplot(fulldata_Num_Corr, method="number", type="upper")
+
+```
+
+Item_Outlet_Sales has a strong positive correlation with Item_MRP and a somewhat weaker negative one with Item_Visibility. Positive correlation between Item_MRP and Item_Outlet_Sales, this is simply due to the fact that sales figures are the number of sold items times their price. We have divided Item_Outlet_Sales by Item_MRP above to reduce outliers. Here this reduces correlation.
+
+
+We will check these relations with other variables. Again we notice there is a huge difference in between grocery stores and supermarkets. This can seen in numers and can clearly be seen in a scatter plot of sales vs. visibilities: 
+
+``` {r include=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+tapply(fulldata[1:8523, ]$Item_Outlet_Sales, fulldata[1:8523, ]$Outlet_Type, "mean")
+
+ggplot(fulldata[1:8523,], aes(Item_Visibility, Item_Outlet_Sales)) +
+  geom_point(size = 2.5, aes(colour = factor(Outlet_Type))) +
+  theme(axis.text.x = element_text(angle = 70, vjust = 0.5, color = "black")) + 
+  xlab("Item Visibility") + 
+  ylab("Item Outlet Sales") +
+  ggtitle("Item Sales vs Item Visibility in different Outlet types") 
+```
+
+From the above table we see that average sales in Supermarket type 1 and 2 are almost close and those figures are far away from grocery stores and supermarket type 3. So we can combine them into a single level.
+
+
+
+##Proper Validation
+
+
+Cross validation is an essential step in model training. It tells us whether our model is at high risk of overfitting. In many competitions, public LB scores are not very reliable. Often when we improve the model and get a better local CV score, the LB score becomes worse. It is widely believed that we should trust our CV scores under such situation. Ideally we would want CV scores obtained by different approaches to improve in sync with each other and with the LB score, but this is not always possible.
+
+Usually 5-fold CV is good enough. If we use more folds, the CV score would become more reliable, but the training takes longer to finish as well. However, we shouldn’t use too many folds if our training data is limited. Otherwise we would have too few samples in each fold to guarantee statistical significance.
+
+How to do CV properly is not a trivial problem. It requires constant experiment and case-by-case discussion. Many Kagglers share their CV approaches ([like this one](https://www.kaggle.com/c/telstra-recruiting-network/discussion/19277)) after competitions when they feel that reliable CV is not easy.
+
+
+
+##Model Selection and Summary 
+
+
+When the features are set, we can start training models. Kaggle competitions usually favor tree-based models:
+Gradient Boosted Trees
+Random Forest
+
+We can improve a model’s performance by tuning its parameters. A model usually have many parameters, but only a few of them are significant to its performance. For example, the most important parameters for a random forset is the number of trees in the forest and the maximum number of features used in developing each tree. We need to understand how models work and what impact does each parameter have to the model’s performance, be it accuracy, robustness or speed. In order to find a decent model to predict sales I performed an extensive search of various machine learning models available in R, in particular of those accessible through the caret wrapper. Since my laptop does not have a high processor and ram, I have to stick with basic models and rely mainly on feature Engneering. But in general, without Esembling you will not get very high score in competitions. So for begineers(like me) concentrate mainly on visulaization, finding patterns in the data, creating new features that can increase your score.
+
