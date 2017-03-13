@@ -48,12 +48,6 @@ train_pred = predict(rpart_Model, newdata = new_train)
 
 
 
-### Random Forests 
-library(randomForest)
-
-rfModel = Train
-
-
 SampleSubmission <- read.csv("M:/bla bla/D.sci/data sets/Big mart sales/SampleSubmission_TmnO39y.csv")
 
 SampleSubmission$Item_Outlet_Sales = rpart_pred*new_test$Item_MRP
