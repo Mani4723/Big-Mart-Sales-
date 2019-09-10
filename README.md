@@ -7,7 +7,7 @@ December 9, 2016
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-For me Kaggle and Analytics Vidya are the best places to learn from other data scientists. I have participated in few data science competitions on both platforms. Data Science competitions genrally takes place like this, first companies provide data and prize money to setup competitions, they provide few weeks of time to compete. if you end up in top 10 you might get a chance(/ have to) to present your results. As far as Begineers, if you missed the competition or not able to get decent score on dashboards, you can take up this data sets and practice on it, try different models, features, try all the things you learnt in theory and also learn from solutions of other data scientists. This is my contribution to data science begineers and Analytics Vidya community.
+Kaggle and Analytics Vidya are the best places to learn from other data scientists. I have participated in few data science competitions on both platforms. Data Science competitions genrally takes place like this, first companies provide data and prize money to setup competitions, they provide few weeks of time to compete. if you end up in top 10 you might get a chance(/ have to) to present your results. As far as Begineers, if you missed the competition or not able to get decent score on dashboards, you can take up this data sets and practice on it, try different models, features, try all the things you learnt in theory and also learn from solutions of other data scientists. This is my contribution to data science begineers and Analytics Vidya community.
 
 This is a Regression-Predictive Modelling Problem (Predictor/resonse variable is continous). More about the problem, and where you can find the datasets is given below.
 
